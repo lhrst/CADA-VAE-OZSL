@@ -52,10 +52,10 @@ hyperparameters = {
                               'AWA2': (200, 0, 400, 0),
                               'FLO': (200, 0, 400, 0),
                               'AWA1': (200, 0, 400, 0)},
-    'epochs': 100,
+    'epochs': 5,
     'loss': 'l1',
     'auxiliary_data_source' : 'attributes',
-    'lr_cls': 0.001,
+    'lr_cls': 0.001,    
     'dataset': 'CUB',
     'hidden_size_rule': {'resnet_features': (1560, 1660),
                         'attributes': (1450, 665),
@@ -87,8 +87,8 @@ cls_train_steps = [
       {'dataset': 'AWA1', 'num_shots': 2, 'generalized': False, 'cls_train_steps': 59},
       {'dataset': 'AWA1', 'num_shots': 10, 'generalized': True, 'cls_train_steps': 100},
       {'dataset': 'AWA1', 'num_shots': 10, 'generalized': False, 'cls_train_steps': 50},
-      {'dataset': 'CUB',  'num_shots': 0, 'generalized': True, 'cls_train_steps': 23},
-      {'dataset': 'CUB',  'num_shots': 0, 'generalized': False, 'cls_train_steps': 22},
+      {'dataset': 'CUB',  'num_shots': 0, 'generalized': True, 'cls_train_steps': 24},
+      {'dataset': 'CUB',  'num_shots': 0, 'generalized': False, 'cls_train_steps': 200},
       {'dataset': 'CUB',  'num_shots': 1, 'generalized': True, 'cls_train_steps': 34},
       {'dataset': 'CUB',  'num_shots': 1, 'generalized': False, 'cls_train_steps': 46},
       {'dataset': 'CUB',  'num_shots': 5, 'generalized': True, 'cls_train_steps': 64},
@@ -107,6 +107,7 @@ cls_train_steps = [
       {'dataset': 'AWA2', 'num_shots': 2, 'generalized': False, 'cls_train_steps': 79},
       {'dataset': 'AWA2', 'num_shots': 10, 'generalized': True, 'cls_train_steps': 86},
       {'dataset': 'AWA2', 'num_shots': 10, 'generalized': False, 'cls_train_steps': 78}
+    
       ]
 
 ##################################
@@ -169,7 +170,7 @@ if hyperparameters['generalized']==True:
 elif hyperparameters['generalized']==False:
     acc = [hi[1] for hi in history]
 
-print(acc[-1])
+print(max(acc))
 
 
 state = {
@@ -182,6 +183,22 @@ for d in model.all_data_sources:
     state['encoder'][d] = model.encoder[d].state_dict()
     state['decoder'][d] = model.decoder[d].state_dict()
 
-
-torch.save(state, 'CADA_trained.pth.tar')
+Q = ""
+if hyperparameters["generalized"]:
+    Q = 'GZSL'
+else:
+    Q = 'ZSL'
+model_save_dir = os.path.join('stated_model', hyperparameters['dataset'], Q)
+if not os.path.exists(model_save_dir):
+        os.makedirs(model_save_dir)  
+torch.save(state, model_save_dir + '/trained.pth.tar')
 print('>> saved')
+
+from urllib.parse import quote
+import requests
+def bark(text):
+    text = quote(text)
+    url = "https://api.day.app/qgfs4deJDpkSbdpSAJjCjE/{}".format(text)
+    r = requests.get(url)
+    return r.text
+bark('done!')

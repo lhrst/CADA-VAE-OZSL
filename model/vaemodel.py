@@ -11,17 +11,6 @@ from data_loader import DATA_LOADER as dataloader
 import final_classifier as  classifier
 import models
 
-class LINEAR_LOGSOFTMAX(nn.Module):
-    def __init__(self, input_dim, nclass):
-        super(LINEAR_LOGSOFTMAX, self).__init__()
-        self.fc = nn.Linear(input_dim,nclass)
-        self.logic = nn.LogSoftmax(dim=1)
-        self.lossfunction =  nn.NLLLoss()
-
-    def forward(self, x):
-        o = self.logic(self.fc(x))
-        return o
-
 class Model(nn.Module):
 
     def __init__(self,hyperparameters):
@@ -47,11 +36,11 @@ class Model(nn.Module):
         self.lr_cls = hyperparameters['lr_cls']
         self.cross_reconstruction = hyperparameters['model_specifics']['cross_reconstruction']
         self.cls_train_epochs = hyperparameters['cls_train_steps']
-        self.dataset = dataloader( self.DATASET, copy.deepcopy(self.auxiliary_data_source) , device= self.device )
+        self.dataset = dataloader(self.DATASET, copy.deepcopy(self.auxiliary_data_source) , device= self.device )
 
         if self.DATASET=='CUB':
             self.num_classes=200
-            self.num_novel_classes = 50
+            self.num_novel_classes = 25
         elif self.DATASET=='SUN':
             self.num_classes=717
             self.num_novel_classes = 72
@@ -295,15 +284,15 @@ class Model(nn.Module):
             cls_novelclasses = self.map_label(cls_novelclasses, cls_novelclasses)
 
 
-        if self.generalized:
-            print('mode: gzsl')
-            clf = LINEAR_LOGSOFTMAX(self.latent_size, self.num_classes)
-        else:
-            print('mode: zsl')
-            clf = LINEAR_LOGSOFTMAX(self.latent_size, self.num_novel_classes)
+        # if self.generalized:
+        #     print('mode: gzsl')
+        #     clf = LINEAR_LOGSOFTMAX(self.latent_size, self.num_classes)
+        # else:
+        #     print('mode: zsl')
+        #     clf = LINEAR_LOGSOFTMAX(self.latent_size, self.num_novel_classes)
 
 
-        clf.apply(models.weights_init)
+        # clf.apply(models.weights_init)
 
         with torch.no_grad():
 
@@ -408,10 +397,11 @@ class Model(nn.Module):
         ##### initializing the classifier and train one epoch
         ############################################################
 
-        cls = classifier.CLASSIFIER(clf, train_X, train_Y, test_seen_X, test_seen_Y, test_novel_X,
+        cls = classifier.CLASSIFIER(train_X, train_Y, test_seen_X, test_seen_Y, test_novel_X,
                                     test_novel_Y,
                                     cls_seenclasses, cls_novelclasses,
-                                    self.num_classes, self.device, self.lr_cls, 0.5, 1,
+                                    self.num_classes, self.num_novel_classes, self.device, self.latent_size,
+                                    self.lr_cls,0.5, 1,
                                     self.classifier_batch_size,
                                     self.generalized)
 
@@ -439,3 +429,13 @@ class Model(nn.Module):
                 cls.H).item(), history
         else:
             return 0, torch.tensor(cls.acc).item(), 0, history
+class LINEAR_LOGSOFTMAX(nn.Module):
+    def __init__(self, input_dim, nclass):
+        super(LINEAR_LOGSOFTMAX, self).__init__()
+        self.fc = nn.Linear(input_dim,nclass)
+        self.logic = nn.LogSoftmax(dim=1)
+        self.lossfunction =  nn.NLLLoss()
+
+    def forward(self, x):
+        o = self.logic(self.fc(x))
+        return o

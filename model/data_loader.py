@@ -18,7 +18,7 @@ def map_label(label, classes):
     return mapped_label
 
 class DATA_LOADER(object):
-    def __init__(self, dataset, aux_datasource, device='cuda'):
+    def __init__(self, dataset, aux_datasource, device='cuda', imageset = 'res101', attmat = 'att'):
 
         print("The current working directory is")
         print(os.getcwd())
@@ -39,7 +39,9 @@ class DATA_LOADER(object):
         self.device = device
         self.dataset = dataset
         self.auxiliary_data_source = aux_datasource
-
+        self.imageset = imageset
+        self.attmat = attmat
+        
         self.all_data_sources = ['resnet_features'] + [self.auxiliary_data_source]
 
         if self.dataset == 'CUB':
@@ -50,6 +52,8 @@ class DATA_LOADER(object):
             self.datadir = self.data_path + '/AWA1/'
         elif self.dataset == 'AWA2':
             self.datadir = self.data_path + '/AWA2/'
+        elif self.dataset == 'FLO':
+            self.datadir = self.data_path + '/FLO/'
 
 
         self.read_matdataset()
@@ -70,25 +74,29 @@ class DATA_LOADER(object):
 
     def read_matdataset(self):
 
-        path= self.datadir + 'res101.mat'
+        path= self.datadir + self.imageset + '.mat'
         print('_____')
         print(path)
         matcontent = sio.loadmat(path)
         feature = matcontent['features'].T
         label = matcontent['labels'].astype(int).squeeze() - 1
 
-        path= self.datadir + 'att_splits.mat'
+        path= self.datadir + self.attmat + '_splits.mat'
         matcontent = sio.loadmat(path)
+        if 'test_unknown_loc' in matcontent.keys():
+            unknown = 1
         # numpy array index starts from 0, matlab starts from 1
         trainval_loc = matcontent['trainval_loc'].squeeze() - 1
         train_loc = matcontent['train_loc'].squeeze() - 1 #--> train_feature = TRAIN SEEN
         val_unseen_loc = matcontent['val_loc'].squeeze() - 1 #--> test_unseen_feature = TEST UNSEEN
         test_seen_loc = matcontent['test_seen_loc'].squeeze() - 1
         test_unseen_loc = matcontent['test_unseen_loc'].squeeze() - 1
-
+        if unknown:  
+            test_unknown_loc = matcontent['test_unknown_loc'].squeeze() - 1
 
         if self.auxiliary_data_source == 'attributes':
             self.aux_data = torch.from_numpy(matcontent['att'].T).float().to(self.device)
+            # self.aux_data /= self.aux_data.pow(2).sum(1).sqrt().unsqueeze(1).expand(self.aux_data.size(0),self.aux_data.size(1))
         else:
             if self.dataset != 'CUB':
                 print('the specified auxiliary datasource is not available for this dataset')
@@ -107,20 +115,29 @@ class DATA_LOADER(object):
         train_feature = scaler.fit_transform(feature[trainval_loc])
         test_seen_feature = scaler.transform(feature[test_seen_loc])
         test_unseen_feature = scaler.transform(feature[test_unseen_loc])
-
+        if unknown:
+            test_unknown_feature = scaler.transform(feature[test_unknown_loc])
+            
         train_feature = torch.from_numpy(train_feature).float().to(self.device)
         test_seen_feature = torch.from_numpy(test_seen_feature).float().to(self.device)
         test_unseen_feature = torch.from_numpy(test_unseen_feature).float().to(self.device)
-
+        if unknown:
+            test_unknown_feature = torch.from_numpy(test_unknown_feature).float().to(self.device)
+            
         train_label = torch.from_numpy(label[trainval_loc]).long().to(self.device)
         test_unseen_label = torch.from_numpy(label[test_unseen_loc]).long().to(self.device)
         test_seen_label = torch.from_numpy(label[test_seen_loc]).long().to(self.device)
-
+        if unknown:
+            test_unknown_label = torch.from_numpy(label[test_unknown_loc]).long().to(self.device)
+            
         self.seenclasses = torch.from_numpy(np.unique(train_label.cpu().numpy())).to(self.device)
         self.novelclasses = torch.from_numpy(np.unique(test_unseen_label.cpu().numpy())).to(self.device)
+        if unknown:
+            self.unknownclasses = torch.from_numpy(np.unique(test_unknown_label.cpu().numpy())).to(self.device)
         self.ntrain = train_feature.size()[0]
         self.ntrain_class = self.seenclasses.size(0)
         self.ntest_class = self.novelclasses.size(0)
+        
         self.train_class = self.seenclasses.clone()
         self.allclasses = torch.arange(0, self.ntrain_class+self.ntest_class).long()
 
@@ -146,8 +163,14 @@ class DATA_LOADER(object):
         self.data['test_unseen'][self.auxiliary_data_source] = self.aux_data[test_unseen_label]
         self.data['test_unseen']['labels'] = test_unseen_label
 
+        self.data['test_unknown'] = {}
+        self.data['test_unknown']['resnet_features'] = test_unknown_feature
+        self.data['test_unknown'][self.auxiliary_data_source] = self.aux_data[test_unknown_label]
+        self.data['test_unknown']['labels'] = test_unknown_label
+       
         self.novelclass_aux_data = self.aux_data[self.novelclasses]
         self.seenclass_aux_data = self.aux_data[self.seenclasses]
+        self.unknownclass_aux_data = self.aux_data[self.unknownclasses]
 
 
     def transfer_features(self, n, num_queries='num_features'):

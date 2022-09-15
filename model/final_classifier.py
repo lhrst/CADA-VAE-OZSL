@@ -9,6 +9,7 @@ from torch.nn import functional as F
 import sys
 from torch.utils.data import Dataset ,DataLoader
 import numpy as np
+import models
 
 
 def map_label(label, classes):
@@ -19,9 +20,15 @@ def map_label(label, classes):
     return mapped_label
 
 class CLASSIFIER:
-    def __init__(self,model, _train_X, _train_Y,_test_seen_X,_test_seen_Y,_test_novel_X, _test_novel_Y, seenclasses,novelclasses,
-                 _nclass, device , _lr=0.001, _beta1=0.5, _nepoch=20, _batch_size=100, generalized=True, use = None, ignore = None,train_only=False,test_only=False,do_nothing=False):
-
+    def __init__(self, _train_X, _train_Y,_test_seen_X,_test_seen_Y,_test_novel_X, _test_novel_Y, seenclasses,novelclasses,
+                 _nclass, _novelclass, device , latent_size, _lr=0.001, _beta1=0.5, _nepoch=20, _batch_size=100, generalized=True, use = None, ignore = None,train_only=False,test_only=False,do_nothing=False,
+                 ):
+        
+        if generalized:
+            self.model = LINEAR_LOGSOFTMAX(latent_size, _nclass)
+        else:
+            self.model = LINEAR_LOGSOFTMAX(latent_size, _novelclass)
+        self.model.apply(models.weights_init)   
         self.train_only = train_only
         self.device = device
         print('DEVICE')
@@ -48,10 +55,10 @@ class CLASSIFIER:
         self.average_loss = 0
 
 
-        self.model = model.to(self.device)
+        self.model = self.model.to(self.device)
 
 
-        self.criterion = model.lossfunction      ######
+        self.criterion = self.model.lossfunction      ######
 
         self.input = torch.FloatTensor(_batch_size, self.input_dim).to(self.device)
         self.label = torch.LongTensor(_batch_size).to(self.device)
@@ -59,7 +66,7 @@ class CLASSIFIER:
         self.lr = _lr
         self.beta1 = _beta1
 
-        f = list(filter(lambda x:  x.requires_grad, model.parameters()))
+        f = list(filter(lambda x:  x.requires_grad, self.model.parameters()))
         self.optimizer = optim.Adam(f, lr=_lr, betas=(_beta1, 0.999))#
 
         self.criterion.to(self.device)
@@ -341,3 +348,14 @@ class TrainDataset(Dataset):
     def __getitem__(self, idx):
 
         return {'x': self.train_X[idx,:], 'y': self.train_Y[idx] }
+    
+class LINEAR_LOGSOFTMAX(nn.Module):
+    def __init__(self, input_dim, nclass):
+        super(LINEAR_LOGSOFTMAX, self).__init__()
+        self.fc = nn.Linear(input_dim,nclass)
+        self.logic = nn.LogSoftmax(dim=1)
+        self.lossfunction =  nn.NLLLoss()
+
+    def forward(self, x):
+        o = self.logic(self.fc(x))
+        return o
